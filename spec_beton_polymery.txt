@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="utf-8"?>
+<copilot_spec lang="en">
+  <meta>
+    <title>Functional Specification - Polymer Concrete Calculator (Mobile-first)</title>
+    <version>1.0</version>
+    <date>2025-11-28</date>
+    <author>Requested by user</author>
+    <description>Comprehensive XML specification for a lightweight, mobile-first calculator built with Svelte 5 and Tailwind. The tool calculates material quantities (in grams) for polymer concrete preparation based on user-provided mold volumes. This specification includes UX, UI, data models, logic, validations, and edge-case behaviors. No coding instructions are included.</description>
+  </meta>
+
+  <business_requirements>
+    <requirement id="BR-01">The user can input multiple molds (volumes in milliliters). The system sums all volumes and calculates gram quantities for each material.</requirement>
+    <requirement id="BR-02">Calculation formula: totalGrams = totalVolumeMl * 2. Fixed percentages: Water 20%, Bond 5%, White Cement 15%, Putty 60%.</requirement>
+    <requirement id="BR-03">Percentages are fixed in this version; the user cannot modify them.</requirement>
+    <requirement id="BR-04">The interface must be mobile-first, clear, responsive, and show results in real time without requiring an explicit “Calculate” button.</requirement>
+    <requirement id="BR-05">Application state (mold list) should persist in localStorage for quick reuse.</requirement>
+  </business_requirements>
+
+  <user_personas>
+    <persona id="P-1">
+      <name>Construction Worker / Field User</name>
+      <goals>Quick calculation of multiple mold volumes, accurate gram results, minimal typing on mobile devices.</goals>
+      <constraints>Possibly wearing gloves, bright sunlight, using a rugged mobile device.</constraints>
+    </persona>
+    <persona id="P-2">
+      <name>DIY Hobbyist</name>
+      <goals>Convenience, understanding how the mixture is composed, and the ability to reuse previous inputs.</goals>
+    </persona>
+  </user_personas>
+
+  <ux_ui>
+    <general>
+      <orientation>portrait-first</orientation>
+      <layout>single_screen</layout>
+      <max_width>max-w-sm</max_width>
+      <spacing>consistent padding and spacing</spacing>
+      <theme>light (optional dark mode)</theme>
+      <language>English (LTR)</language>
+    </general>
+
+    <input_section>
+      <title>Mold List</title>
+      <description>Dynamic list interface. Each row represents one mold with a volume input field and a delete button.</description>
+      <controls>
+        <control name="add_template_button" label="+ Add Mold" hint="Adds a new volume row"/>
+        <control name="volume_input" type="number" inputmode="decimal" placeholder="Volume (ml)" aria_label="Mold volume in milliliters"/>
+        <control name="delete_button" icon="trash" aria_label="Delete mold" tooltip="Delete"/>
+        <control name="clear_all" display="small_link" label="Clear All" hint="Clears all molds and stored state"/>
+      </controls>
+      <behaviour>
+        <auto_add>If the user fills the last row with a valid number, an empty row is added automatically.</auto_add>
+        <validation>Empty input counts as 0. Negative numbers are not allowed. Non-numeric inputs trigger validation errors.</validation>
+        <input_size>Large input fields, optimized for mobile numeric keyboards.</input_size>
+      </behaviour>
+    </input_section>
+
+    <summary_section>
+      <title>Total Volume</title>
+      <display>Displayed above or below the mold list (configurable). Shows total volume in milliliters.</display>
+      <format>"Total Volume: 1,230 ml" with thousands separators.</format>
+    </summary_section>
+
+    <results_section>
+      <title>Results (grams)</title>
+      <items>
+        <item name="water" percent="0.20" display_name="Water" rounding="nearest" unit="g"/>
+        <item name="bond" percent="0.05" display_name="Bond" rounding="nearest" unit="g"/>
+        <item name="white_cement" percent="0.15" display_name="White Cement" rounding="nearest" unit="g"/>
+        <item name="putty" percent="0.60" display_name="Putty" rounding="nearest" unit="g"/>
+      </items>
+      <display_rules>
+        <live_update>All results update instantly as the user edits mold volumes.</live_update>
+        <formatting>Values are rounded to whole grams. Values under 1g are displayed as 0 unless precision is required.</formatting>
+        <emphasis>Numeric values highlighted; unit placed next to value.</emphasis>
+      </display_rules>
+    </results_section>
+
+    <microinteractions>
+      <on_add_template>Short fade-in animation for new rows; focus moves to new input.</on_add_template>
+      <on_delete_template>Row slides up and disappears; an undo toast appears for 3.5 seconds.</on_delete_template>
+      <on_invalid_input>Inline error message beneath input; red border for the field.</on_invalid_input>
+    </microinteractions>
+
+    <accessibility>
+      <labels>All controls and fields have clear ARIA labels.</labels>
+      <contrast>Color choices must meet WCAG AA contrast ratios.</contrast>
+      <keyboard>All operations, including add/delete, accessible via keyboard/tab navigation.</keyboard>
+      <screen_reader>Screen readers announce row index, volume, total volume, and updated results.</screen_reader>
+    </accessibility>
+  </ux_ui>
+
+  <data_model>
+    <entities>
+      <entity name="MoldRow">
+        <field name="id" type="string" description="Local UUID"/>
+        <field name="volume_ml" type="number" description="Volume in milliliters (integer or decimal)"/>
+        <field name="created_at" type="datetime"/>
+      </entity>
+      <entity name="AppState">
+        <field name="molds" type="MoldRow[]"/>
+        <field name="total_volume_ml" type="number"/>
+        <field name="results" type="object" description="Grams per material"/>
+      </entity>
+    </entities>
+
+    <persistence>
+      <localStorage>
+        <key>poly_concrete_state_v1</key>
+        <fields_to_store>molds, last_updated</fields_to_store>
+        <ttl>Persistent until explicitly cleared by the user.</ttl>
+      </localStorage>
+    </persistence>
+  </data_model>
+
+  <calculation_logic>
+    <overview>All computations follow deterministic steps to ensure consistency.</overview>
+    <steps>
+      <step id="C-1" description="Compute totalVolumeMl = sum(mold.volume_ml)"/>
+      <step id="C-2" description="Compute totalGrams = totalVolumeMl * 2"/>
+      <step id="C-3" description="For each material: grams = round(totalGrams * percent)" rounding="nearest_integer"/>
+      <step id="C-4" description="Final normalization: ensure the sum of calculated grams equals totalGrams. If not, adjust the material with the highest percentage (Putty) by ±1g."/>
+    </steps>
+
+    <examples>
+      <example>
+        <input>Mold A=320 ml, Mold B=150 ml</input>
+        <calc>totalVolumeMl=470 → totalGrams=940</calc>
+        <output>
+          <water>188 g</water>
+          <bond>47 g</bond>
+          <white_cement>141 g</white_cement>
+          <putty>564 g</putty>
+        </output>
+      </example>
+    </examples>
+  </calculation_logic>
+
+  <edge_cases_and_validation>
+    <empty_state>If no molds are defined: total volume = 0; results all 0; display helper text "Add a mold to begin".</empty_state>
+    <non_numeric>Non-numeric inputs produce an inline error and the row is excluded from calculation.</non_numeric>
+    <negative_values>Negative values are invalid. Automatically corrected to 0 with error notice.</negative_values>
+    <very_large_values>Maximum supported per mold: 100,000 ml (configurable). If exceeded, show warning and allow user confirmation.</very_large_values>
+    <decimal_input>Decimal input supported up to 3 decimal places before rounding.</decimal_input>
+  </edge_cases_and_validation>
+
+  <analytics_and_logging>
+    <events>
+      <event>add_mold</event>
+      <event>delete_mold</event>
+      <event>clear_all</event>
+      <event>calculation_performed</event>
+    </events>
+    <privacy>No personal data collected; analytics optional and opt-in.</privacy>
+  </analytics_and_logging>
+
+  <testing>
+    <unit_tests>
+      <test_case id="T1">Single mold: 100 ml → totalGrams=200 → Water=40, Bond=10, Cement=30, Putty=120.</test_case>
+      <test_case id="T2">Multi-mold calculation: example provided above.</test_case>
+      <test_case id="T3">Rounding integrity: ensure normalized sum equals totalGrams.</test_case>
+      <test_case id="T4">Empty row: treated as 0.</test_case>
+    </unit_tests>
+
+    <e2e_tests>
+      <flow>Add 4 molds, edit one, delete another, trigger undo, refresh page, verify localStorage restore.</flow>
+    </e2e_tests>
+  </testing>
+
+  <localization>
+    <default_language>en-US</default_language>
+    <strings>
+      <string id="add_mold">+ Add Mold</string>
+      <string id="total_volume">Total Volume</string>
+      <string id="results">Results (g)</string>
+      <string id="empty_prompt">Add a mold to begin</string>
+      <string id="clear_all">Clear All</string>
+      <string id="undo">Undo</string>
+    </strings>
+  </localization>
+
+  <deliverables>
+    <deliverable>This XML specification — intended for Copilot or other requirement parsers.</deliverable>
+    <deliverable>Optional wireframe describing the single-screen layout.</deliverable>
+    <deliverable>Test cases and edge-case scenarios.</deliverable>
+  </deliverables>
+
+  <notes>
+    <note>Phase 1: fixed percentages only.</note>
+    <note>Phase 2 (future): advanced settings for custom percentages, alternate units, recipe export/import.</note>
+  </notes>
+
+</copilot_spec>
