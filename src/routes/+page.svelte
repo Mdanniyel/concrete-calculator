@@ -4,9 +4,8 @@
 
 	type MoldRow = {
 		id: string;
-		volume_ml: number | null;
+		volume_ml: number;
 		created_at: string;
-		error?: string | null;
 	};
 
 	type Results = {
@@ -22,22 +21,17 @@
 	let molds = $state<MoldRow[]>([]);
 	let undoStack = $state<MoldRow[] | null>(null);
 	let showUndo = $state(false);
-	let totalVolumeMl = $derived(
-		molds.reduce((sum, mold) => (isValidVolume(mold) ? sum + (mold.volume_ml ?? 0) : sum), 0)
-	);
+	let inputValue = $state('');
+	let inputError = $state<string | null>(null);
+	let totalVolumeMl = $derived(molds.reduce((sum, mold) => sum + mold.volume_ml, 0));
 	let totalGrams = $derived(totalVolumeMl * 2);
 	let results = $derived<Results>(calculateResults(totalGrams));
-
-	function isValidVolume(mold: MoldRow): boolean {
-		return !mold.error && typeof mold.volume_ml === 'number' && !Number.isNaN(mold.volume_ml);
-	}
 
 	function createEmptyMold(): MoldRow {
 		return {
 			id: crypto.randomUUID(),
-			volume_ml: null,
-			created_at: new Date().toISOString(),
-			error: null
+			volume_ml: 0,
+			created_at: new Date().toISOString()
 		};
 	}
 
@@ -61,7 +55,6 @@
 			};
 		}
 
-		// limit to 3 decimal places
 		parsed = Math.round(parsed * 1000) / 1000;
 		return { value: parsed, error: null };
 	}
@@ -90,33 +83,13 @@
 		return { water, bond, white_cement, putty };
 	}
 
-	function addMold(focusLast = true) {
-		molds = [...molds, createEmptyMold()];
-		if (focusLast) {
-			queueMicrotask(() => {
-				const input = document.querySelector<HTMLInputElement>(
-					'[data-mold-input="last"]'
-				);
-				input?.focus();
-			});
-		}
-	}
-
-	function onVolumeInput(id: string, raw: string, isLast: boolean) {
-		molds = molds.map((mold, index) => {
-			if (mold.id !== id) return mold;
-			const { value, error } = normalizeAndValidateVolume(raw);
-			return { ...mold, volume_ml: value, error };
-		});
-
-		// auto-add row when last becomes valid
-		if (isLast) {
-			const last = molds[molds.length - 1];
-			if (last && isValidVolume(last)) {
-				addMold(false);
-			}
-		}
-
+	function addMold() {
+		const { value, error } = normalizeAndValidateVolume(inputValue);
+		inputError = error;
+		if (value === null || error) return;
+		molds = [...molds, { id: crypto.randomUUID(), volume_ml: value, created_at: new Date().toISOString() }];
+		inputValue = '';
+		inputError = null;
 		saveState();
 	}
 
@@ -124,7 +97,6 @@
 		undoStack = molds;
 		showUndo = true;
 		molds = molds.filter((m) => m.id !== id);
-		if (molds.length === 0) addMold(false);
 		saveState();
 		setTimeout(() => {
 			showUndo = false;
@@ -136,7 +108,8 @@
 		undoStack = molds;
 		showUndo = true;
 		molds = [];
-		addMold(false);
+		inputValue = '';
+		inputError = null;
 		localStorage.removeItem(STORAGE_KEY);
 		setTimeout(() => {
 			showUndo = false;
@@ -154,10 +127,9 @@
 
 	function saveState() {
 		if (typeof localStorage === 'undefined') return;
-		const toSave = molds.filter((m) => m.volume_ml !== null);
 		localStorage.setItem(
 			STORAGE_KEY,
-			JSON.stringify({ molds: toSave, last_updated: new Date().toISOString() })
+			JSON.stringify({ molds, last_updated: new Date().toISOString() })
 		);
 	}
 
@@ -165,24 +137,36 @@
 		if (typeof localStorage === 'undefined') return;
 		const raw = localStorage.getItem(STORAGE_KEY);
 		if (!raw) {
-			molds = [createEmptyMold()];
+			molds = [];
 			return;
 		}
 		try {
 			const parsed = JSON.parse(raw);
 			if (Array.isArray(parsed.molds) && parsed.molds.length > 0) {
-				molds = parsed.molds.map((m: MoldRow) => ({ ...m, error: null }));
+				molds = parsed.molds;
 			} else {
-				molds = [createEmptyMold()];
+				molds = [];
 			}
 		} catch {
-			molds = [createEmptyMold()];
+			molds = [];
 		}
 	}
 
 	onMount(() => {
 		loadState();
-		if (molds.length === 0) addMold(false);
+		if (molds.length === 0) molds = [];
+
+		// Try to prevent the mobile screen from turning off while the user is actively using the calculator
+		if (typeof navigator !== 'undefined') {
+			const anyNavigator = navigator as Navigator & { wakeLock?: { request(type: 'screen'): Promise<unknown> } };
+			if (anyNavigator.wakeLock?.request) {
+				anyNavigator.wakeLock
+					.request('screen')
+					.catch(() => {
+						/* ignore */
+					});
+			}
+		}
 	});
 
 	function formatNumber(n: number): string {
@@ -211,79 +195,10 @@
 			</div>
 		</section>
 
-		<section aria-label="Mold list" class="mb-4">
-			<div class="flex items-center justify-between mb-2">
-				<h2 class="text-base font-semibold text-slate-800">Mold List</h2>
-				<button
-					type="button"
-					class="text-xs text-slate-500 hover:text-slate-700 underline"
-					onclick={clearAll}
-				>
-					Clear All
-				</button>
-			</div>
-			<div class="space-y-2">
-				{#if molds.length === 0}
-					<p class="text-xs text-slate-400">Add a mold to begin</p>
-				{/if}
-				{#each molds as mold, index (mold.id)}
-					<div
-						class="flex items-start gap-2 rounded-xl bg-white border border-slate-200 px-3 py-2 shadow-sm transition-all duration-150"
-					>
-						<div class="flex-1">
-							<label
-								class="block text-[11px] uppercase tracking-wide text-slate-500 mb-1"
-								for={`mold-${index + 1}`}
-							>
-								Mold {index + 1}
-							</label>
-							<input
-								data-mold-input={index === molds.length - 1 ? 'last' : 'row'}
-								inputmode="decimal"
-								type="text"
-								id={`mold-${index + 1}`}
-								placeholder="Volume (ml)"
-								class={`w-full rounded-lg border px-3 py-2 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 ${
-									mold.error ? 'border-red-400' : 'border-slate-200'
-								}`}
-								aria-label={`Mold ${index + 1} volume in milliliters`}
-								value={mold.volume_ml ?? ''}
-								oninput={(e) => onVolumeInput(mold.id, e.currentTarget.value, index === molds.length - 1)}
-							/>
-							{#if mold.error}
-								<p class="mt-1 text-xs text-red-500">{mold.error}</p>
-							{/if}
-						</div>
-						<button
-							type="button"
-							class="mt-5 shrink-0 rounded-full p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-400"
-							aria-label={`Delete mold ${index + 1}`}
-							onclick={() => deleteMold(mold.id)}
-						>
-							<span class="i-lucide-trash h-4 w-4" aria-hidden="true">🗑</span>
-						</button>
-					</div>
-				{/each}
-			</div>
-			<button
-				type="button"
-				class="mt-3 w-full rounded-xl border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-600 flex items-center justify-center gap-2 hover:border-sky-400 hover:text-sky-600 bg-white/60"
-				onclick={() => addMold()}
-			>
-				<span class="text-lg leading-none">+</span>
-				<span> Add Mold</span>
-			</button>
-		</section>
-
-		<section
-			aria-label="Results in grams"
-			class="mt-4 rounded-xl bg-white shadow-sm border border-slate-100 px-4 py-3"
-		>
+		<section aria-label="Results in grams" class="mb-4 rounded-xl bg-white shadow-sm border border-slate-100 px-4 py-3">
 			<div class="flex items-center justify-between mb-2">
 				<h2 class="text-base font-semibold text-slate-800">Results (g)</h2>
-				<span class="text-[11px] uppercase tracking-wide text-slate-400">
-					Live update
-				</span>
+				<span class="text-[11px] uppercase tracking-wide text-slate-400">Live update</span>
 			</div>
 			{#if totalGrams <= 0}
 				<p class="text-xs text-slate-400">Add a mold to begin</p>
@@ -323,6 +238,71 @@
 					<span class="ml-1">g</span>
 				</p>
 			{/if}
+		</section>
+
+		<section aria-label="Mold list" class="mt-3">
+			<div class="flex items-center justify-between mb-2">
+				<h2 class="text-base font-semibold text-slate-800">Mold List</h2>
+				<button
+					type="button"
+					class="text-xs text-slate-500 hover:text-slate-700 underline"
+					onclick={clearAll}
+				>
+					Clear All
+				</button>
+			</div>
+			<div class="mb-2">
+				<label
+					for="mold-input"
+					class="block text-[11px] uppercase tracking-wide text-slate-500 mb-1"
+				>
+					New mold volume (ml)
+				</label>
+				<div class="flex gap-2">
+					<input
+						id="mold-input"
+						inputmode="decimal"
+						type="text"
+						placeholder="e.g. 320"
+						class={`flex-1 rounded-lg border px-3 py-2 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 ${
+							inputError ? 'border-red-400' : 'border-slate-200'
+						}`}
+						aria-label="Mold volume in milliliters"
+						bind:value={inputValue}
+					/>
+					<button
+						type="button"
+						class="shrink-0 rounded-lg bg-sky-600 text-white px-3 py-2 text-sm font-medium hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-sky-600"
+						onclick={addMold}
+					>
+						+
+					</button>
+				</div>
+				{#if inputError}
+					<p class="mt-1 text-xs text-red-500">{inputError}</p>
+				{/if}
+			</div>
+			<div class="min-h-[1.5rem]">
+				{#if molds.length === 0}
+					<p class="text-xs text-slate-400">Add a mold to begin</p>
+				{:else}
+					<div class="flex flex-wrap gap-2">
+						{#each molds as mold (mold.id)}
+							<span class="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-xs text-slate-700">
+								{formatNumber(mold.volume_ml)} ml
+								<button
+									type="button"
+									class="ml-1 text-slate-400 hover:text-red-500 focus:outline-none"
+									aria-label={`Delete mold of ${mold.volume_ml} milliliters`}
+									onclick={() => deleteMold(mold.id)}
+								>
+									×
+								</button>
+							</span>
+						{/each}
+					</div>
+				{/if}
+			</div>
 		</section>
 
 		{#if showUndo}
