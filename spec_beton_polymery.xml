@@ -9,11 +9,11 @@
   </meta>
 
   <business_requirements>
-    <requirement id="BR-01">The user can input multiple molds (volumes in milliliters). The system sums all volumes and calculates gram quantities for each material.</requirement>
-    <requirement id="BR-02">Calculation formula: totalGrams = totalVolumeMl * 2. Fixed percentages: Water 20%, Bond 5%, White Cement 15%, Putty 60%.</requirement>
+    <requirement id="BR-01">The user can manage a "Mold Library" where each mold has a name, volume, and active state.</requirement>
+    <requirement id="BR-02">Calculation formula: totalGrams = sum(active_molds_volume) * 2. Fixed percentages: Water 20%, Bond 5%, White Cement 15%, Putty 60%.</requirement>
     <requirement id="BR-03">Percentages are fixed in this version; the user cannot modify them.</requirement>
-    <requirement id="BR-04">The interface must be mobile-first, clear, responsive, and show results in real time without requiring an explicit “Calculate” button.</requirement>
-    <requirement id="BR-05">Application state (mold list) should persist in localStorage for quick reuse.</requirement>
+    <requirement id="BR-04">The interface must be mobile-first, clear, responsive, and show results in real time based on active molds.</requirement>
+    <requirement id="BR-05">Application state (mold library) should persist in localStorage for quick reuse.</requirement>
   </business_requirements>
 
   <user_personas>
@@ -39,53 +39,55 @@
     </general>
 
     <input_section>
-      <title>Mold List</title>
-      <description>Dynamic list interface. Each row represents one mold with a volume input field and a delete button.</description>
+      <title>Mold Library</title>
+      <description>List of saved molds. Each row represents a mold with name, volume, and toggle state.</description>
       <controls>
-        <control name="add_template_button" label="+ Add Mold" hint="Adds a new volume row"/>
+        <control name="add_mold_button" label="+" hint="Adds a new mold to library"/>
+        <control name="name_input" type="text" placeholder="Name (e.g. Cube)" aria_label="Mold name"/>
         <control name="volume_input" type="number" inputmode="decimal" placeholder="Volume (ml)" aria_label="Mold volume in milliliters"/>
         <control name="delete_button" icon="trash" aria_label="Delete mold" tooltip="Delete"/>
         <control name="clear_all" display="small_link" label="Clear All" hint="Clears all molds and stored state"/>
       </controls>
       <behaviour>
-        <auto_add>If the user fills the last row with a valid number, an empty row is added automatically.</auto_add>
-        <validation>Empty input counts as 0. Negative numbers are not allowed. Non-numeric inputs trigger validation errors.</validation>
-        <input_size>Large input fields, optimized for mobile numeric keyboards.</input_size>
+        <add_flow>User enters Name and Volume, then clicks Add. New mold is Active by default.</add_flow>
+        <toggle_flow>Clicking a mold row toggles its Active state (Green = Active, Gray = Inactive).</toggle_flow>
+        <validation>Volume required. Name optional (defaults to "Mold #N"). Negative numbers not allowed.</validation>
       </behaviour>
     </input_section>
 
     <summary_section>
-      <title>Total Volume</title>
-      <display>Displayed above or below the mold list (configurable). Shows total volume in milliliters.</display>
-      <format>"Total Volume: 1,230 ml" with thousands separators.</format>
+      <title>Total Active Volume</title>
+      <display>Displayed above the results. Shows sum of volumes of all ACTIVE molds.</display>
+      <format>"Total Active Volume: 1,230 ml" with thousands separators.</format>
     </summary_section>
 
     <results_section>
       <title>Results (grams)</title>
       <items>
-        <item name="water" percent="0.20" display_name="Water" rounding="nearest" unit="g"/>
-        <item name="bond" percent="0.05" display_name="Bond" rounding="nearest" unit="g"/>
-        <item name="white_cement" percent="0.15" display_name="White Cement" rounding="nearest" unit="g"/>
-        <item name="putty" percent="0.60" display_name="Putty" rounding="nearest" unit="g"/>
+        <item name="water" percent="0.20" display_name="Water" rounding="nearest" unit="g" color="sky"/>
+        <item name="bond" percent="0.05" display_name="Bond" rounding="nearest" unit="g" color="emerald (green)"/>
+        <item name="white_cement" percent="0.15" display_name="White Cement" rounding="nearest" unit="g" color="white"/>
+        <item name="putty" percent="0.60" display_name="Putty" rounding="nearest" unit="g" color="slate (gray)"/>
       </items>
       <display_rules>
-        <live_update>All results update instantly as the user edits mold volumes.</live_update>
+        <live_update>All results update instantly as the user toggles molds or adds new ones.</live_update>
         <formatting>Values are rounded to whole grams. Values under 1g are displayed as 0 unless precision is required.</formatting>
         <emphasis>Numeric values highlighted; unit placed next to value.</emphasis>
       </display_rules>
     </results_section>
 
     <microinteractions>
-      <on_add_template>Short fade-in animation for new rows; focus moves to new input.</on_add_template>
-      <on_delete_template>Row slides up and disappears; an undo toast appears for 3.5 seconds.</on_delete_template>
+      <on_add_mold>Short fade-in animation for new rows.</on_add_mold>
+      <on_toggle>Visual state change (Green <-> Gray) with smooth transition.</on_toggle>
+      <on_delete_mold>Row slides up and disappears; an undo toast appears for 3.5 seconds.</on_delete_mold>
       <on_invalid_input>Inline error message beneath input; red border for the field.</on_invalid_input>
     </microinteractions>
 
     <accessibility>
       <labels>All controls and fields have clear ARIA labels.</labels>
       <contrast>Color choices must meet WCAG AA contrast ratios.</contrast>
-      <keyboard>All operations, including add/delete, accessible via keyboard/tab navigation.</keyboard>
-      <screen_reader>Screen readers announce row index, volume, total volume, and updated results.</screen_reader>
+      <keyboard>All operations, including add/delete/toggle, accessible via keyboard/tab navigation.</keyboard>
+      <screen_reader>Screen readers announce row index, name, volume, active state, and updated results.</screen_reader>
     </accessibility>
   </ux_ui>
 
@@ -93,19 +95,21 @@
     <entities>
       <entity name="MoldRow">
         <field name="id" type="string" description="Local UUID"/>
-        <field name="volume_ml" type="number" description="Volume in milliliters (integer or decimal)"/>
+        <field name="name" type="string" description="User defined name or default"/>
+        <field name="volume_ml" type="number" description="Volume in milliliters"/>
+        <field name="active" type="boolean" description="Whether included in calculation"/>
         <field name="created_at" type="datetime"/>
       </entity>
       <entity name="AppState">
         <field name="molds" type="MoldRow[]"/>
-        <field name="total_volume_ml" type="number"/>
+        <field name="total_volume_ml" type="number" description="Sum of active molds"/>
         <field name="results" type="object" description="Grams per material"/>
       </entity>
     </entities>
 
     <persistence>
       <localStorage>
-        <key>poly_concrete_state_v1</key>
+        <key>poly_concrete_state_v2</key>
         <fields_to_store>molds, last_updated</fields_to_store>
         <ttl>Persistent until explicitly cleared by the user.</ttl>
       </localStorage>
