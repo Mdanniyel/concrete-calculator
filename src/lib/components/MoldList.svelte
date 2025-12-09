@@ -11,8 +11,8 @@
         <div
             class="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl"
         >
-            <p class="text-sm text-slate-400">Library is empty</p>
-            <p class="text-xs text-slate-300 mt-1">Add your first mold above</p>
+            <p class="text-sm text-slate-400">הספרייה ריקה</p>
+            <p class="text-xs text-slate-300 mt-1">הוסף את התבנית הראשונה שלך למעלה</p>
         </div>
     {:else}
         {#each calculator.molds as mold (mold.id)}
@@ -40,7 +40,7 @@
                             {mold.name}
                         </div>
                         <div class="text-xs text-slate-400">
-                            {formatNumber(mold.volume_ml)} ml
+                            {formatNumber(mold.volume_ml)} מ"ל
                         </div>
                     </div>
                 </button>
@@ -52,7 +52,7 @@
                         type="button"
                         class="p-1 text-slate-300 hover:text-red-500 transition-colors focus:outline-none"
                         onclick={() => calculator.deleteMold(mold.id)}
-                        aria-label="Delete mold"
+                        aria-label="מחק תבנית"
                     >
                         <svg
                             xmlns="http://www.w3.org/2000/svg"

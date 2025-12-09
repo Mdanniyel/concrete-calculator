@@ -15,21 +15,21 @@
 
         let parsed = Number(raw.replace(",", "."));
         if (Number.isNaN(parsed)) {
-            return { value: null, error: "Please enter a valid number" };
+            return { value: null, error: "אנא הזן מספר תקין" };
         }
 
         if (parsed < 0) {
             parsed = 0;
             return {
                 value: parsed,
-                error: "Negative values are not allowed; set to 0",
+                error: "ערכים שליליים אינם מותרים; נקבע ל-0",
             };
         }
 
         if (parsed > MAX_VOLUME_PER_MOLD) {
             return {
                 value: MAX_VOLUME_PER_MOLD,
-                error: `Max allowed is ${MAX_VOLUME_PER_MOLD.toLocaleString()} ml`,
+                error: `הערך המרבי המותר הוא ${MAX_VOLUME_PER_MOLD.toLocaleString()} מ"ל`,
             };
         }
 
@@ -42,7 +42,7 @@
         inputError = error;
         if (value === null) {
             if (!error && !inputVolume.trim()) {
-                inputError = "Volume is required";
+                inputError = "נפח הוא שדה חובה";
             }
             return;
         }
@@ -63,12 +63,12 @@
             <label
                 for="mold-name"
                 class="block text-[10px] uppercase tracking-wide text-slate-500 mb-1"
-                >Name</label
+                >שם</label
             >
             <input
                 id="mold-name"
                 type="text"
-                placeholder="e.g. Cube"
+                placeholder="לדוגמה, קובייה"
                 class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm bg-slate-50 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                 bind:value={inputName}
             />
@@ -77,7 +77,7 @@
             <label
                 for="mold-volume"
                 class="block text-[10px] uppercase tracking-wide text-slate-500 mb-1"
-                >Vol (ml)</label
+                >נפח (מ"ל)</label
             >
             <input
                 id="mold-volume"
@@ -94,7 +94,7 @@
             type="button"
             class="h-[38px] w-[38px] flex items-center justify-center rounded-lg bg-sky-600 text-white hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-sky-600"
             onclick={addMold}
-            aria-label="Add mold"
+            aria-label="הוסף תבנית"
         >
             +
         </button>
